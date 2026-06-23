@@ -3,25 +3,43 @@
   "version": "0.1.0+codex.20260623110442",
   "description": "Local Markdown experience memory with SAG search and background dreaming.",
   "author": {
-    "name": "Local developer"
+    "name": "EvanSener",
+    "email": "36506664+EvanSener@users.noreply.github.com",
+    "url": "https://github.com/EvanSener"
   },
+  "homepage": "https://github.com/EvanSener/codex-experience-memory",
+  "repository": "https://github.com/EvanSener/codex-experience-memory",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "memory",
+    "agent-memory",
+    "sag",
+    "sqlite",
+    "markdown",
+    "sleep-time",
+    "dreaming"
+  ],
   "skills": "./skills/",
   "interface": {
     "displayName": "Codex Experience Memory",
     "shortDescription": "Remember useful Codex lessons in Markdown.",
     "longDescription": "Codex Experience Memory stores reusable lessons as Markdown, rebuilds a local SQLite SAG index for related-file search, and runs a launchd watcher for sleep-time AI summaries.",
-    "developerName": "Local developer",
-    "category": "Productivity",
+    "developerName": "EvanSener",
+    "category": "Developer Tools",
     "capabilities": [
       "Memory",
       "MCP",
-      "Write"
+      "Write",
+      "Background automation"
     ],
+    "websiteURL": "https://github.com/EvanSener/codex-experience-memory",
     "defaultPrompt": [
       "Search my experience memory for this task.",
       "Reflect on this session and write useful lessons.",
       "Check related memory files before editing."
-    ]
+    ],
+    "brandColor": "#2563EB"
   },
   "mcpServers": "./.mcp.json"
 }
