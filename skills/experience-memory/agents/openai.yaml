@@ -1,0 +1,13 @@
+interface:
+  display_name: "Experience Memory"
+  short_description: "Search and write local Codex lessons"
+  default_prompt: "Use $experience-memory to search prior lessons before this task."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "experience_memory"
+      description: "Local SAG-backed Markdown experience memory"
+
+policy:
+  allow_implicit_invocation: true

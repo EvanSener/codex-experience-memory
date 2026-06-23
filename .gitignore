@@ -9,10 +9,10 @@ build/
 *.egg-info/
 
 # Runtime memory lives outside this plugin, but ignore it if a user points CEM_HOME here.
-experience-memory/
-memories/
-index/
-state/
-cache/
-logs/
-archive/
+/experience-memory/
+/memories/
+/index/
+/state/
+/cache/
+/logs/
+/archive/
