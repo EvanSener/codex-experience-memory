@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "experience_memory": {
+      "title": "Codex Experience Memory",
+      "description": "Local Markdown experience memory with a SQLite SAG index.",
+      "command": "python3",
+      "args": ["-m", "experience_memory.mcp_server"],
+      "cwd": "./server"
+    }
+  }
+}

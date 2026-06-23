@@ -1,0 +1,21 @@
+{
+  "name": "codex-experience-memory",
+  "interface": {
+    "displayName": "Codex Experience Memory"
+  },
+  "plugins": [
+    {
+      "name": "codex-experience-memory",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/EvanSener/codex-experience-memory.git",
+        "ref": "main"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

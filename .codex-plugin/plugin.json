@@ -1,0 +1,27 @@
+{
+  "name": "codex-experience-memory",
+  "version": "0.1.0+codex.20260623110442",
+  "description": "Local Markdown experience memory with SAG search and background dreaming.",
+  "author": {
+    "name": "Local developer"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Codex Experience Memory",
+    "shortDescription": "Remember useful Codex lessons in Markdown.",
+    "longDescription": "Codex Experience Memory stores reusable lessons as Markdown, rebuilds a local SQLite SAG index for related-file search, and runs a launchd watcher for sleep-time AI summaries.",
+    "developerName": "Local developer",
+    "category": "Productivity",
+    "capabilities": [
+      "Memory",
+      "MCP",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Search my experience memory for this task.",
+      "Reflect on this session and write useful lessons.",
+      "Check related memory files before editing."
+    ]
+  },
+  "mcpServers": "./.mcp.json"
+}
