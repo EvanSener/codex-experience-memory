@@ -73,17 +73,6 @@ codex plugin add codex-experience-memory@personal
 
 安装后建议开启一个新的 Codex 对话，让新的 skill 和 MCP 工具完整加载。
 
-## Git Marketplace 安装
-
-如果只想安装插件本体，不需要从源码路径安装 launchd，可以使用远程 marketplace：
-
-```bash
-codex plugin marketplace add EvanSener/codex-experience-memory
-codex plugin add codex-experience-memory@codex-experience-memory
-```
-
-后台 dreamer 仍建议使用上面的 personal clone 路径安装，方便后续升级和调试。
-
 ## 输出目录
 
 ```text
