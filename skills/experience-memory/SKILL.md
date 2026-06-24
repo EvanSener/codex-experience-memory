@@ -41,7 +41,7 @@ Tell the user to open a new Codex thread so new skills and MCP tools load.
 - Source of truth: `~/.codex/experience-memory/memories/*.md`.
 - SAG index: `~/.codex/experience-memory/index/experience.sqlite`; treat it as rebuildable.
 - State and cache live under `state/` and `cache/`; do not read them as memory.
-- Background dreaming is time-based: launchd runs the watcher every 30 minutes.
+- Background dreaming is time-based: launchd runs the watcher every 30 minutes and tracks session files by update/byte offset, so long-running sessions keep being read.
 - Dreaming uses native `codex exec --ephemeral`; do not create a separate `CODEX_HOME`.
 - Keep memory concrete: trigger, pitfall, solution, verification, and evidence.
 - Do not store secrets, credentials, or one-off chat.

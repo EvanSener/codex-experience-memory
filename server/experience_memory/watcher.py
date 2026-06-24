@@ -4,8 +4,10 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -108,29 +110,68 @@ def parse_event_time(payload: dict[str, Any], fallback: float) -> str:
     return datetime.fromtimestamp(fallback, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def summarize_session(path: Path, max_items: int = 500) -> list[dict[str, Any]]:
+def summarize_lines(lines: list[str], fallback_mtime: float, max_items: int = 500) -> list[dict[str, Any]]:
     summaries: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for line in lines:
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        typ = str(payload.get("type", ""))
+        if typ not in {"response_item", "event_msg", "turn_context"} and "message" not in payload and "item" not in payload:
+            continue
+        text = message_text(payload)
+        dedupe_key = compact_text(text).lower()[:500]
+        if text and not is_session_scaffold_text(text) and dedupe_key not in seen:
+            seen.add(dedupe_key)
+            summaries.append({"summary": text[:500], "created_at": parse_event_time(payload, fallback_mtime)})
+        if len(summaries) >= max_items:
+            break
+    return summaries
+
+
+def summarize_session(path: Path, max_items: int = 500) -> list[dict[str, Any]]:
     try:
         mtime = path.stat().st_mtime
-        seen: set[str] = set()
-        for line in path.read_text(encoding="utf-8", errors="ignore").splitlines()[-3000:]:
-            try:
-                payload = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            typ = str(payload.get("type", ""))
-            if typ not in {"response_item", "event_msg", "turn_context"} and "message" not in payload and "item" not in payload:
-                continue
-            text = message_text(payload)
-            dedupe_key = compact_text(text).lower()[:500]
-            if text and not is_session_scaffold_text(text) and dedupe_key not in seen:
-                seen.add(dedupe_key)
-                summaries.append({"summary": text[:500], "created_at": parse_event_time(payload, mtime)})
-            if len(summaries) >= max_items:
-                break
+        return summarize_lines(path.read_text(encoding="utf-8", errors="ignore").splitlines()[-3000:], mtime, max_items)
     except FileNotFoundError:
         return []
-    return summaries
+
+
+def read_appended_lines(path: Path, offset: int) -> tuple[list[str], int, float, int]:
+    stat = path.stat()
+    if offset > stat.st_size:
+        offset = 0
+    with path.open("rb") as file:
+        file.seek(offset)
+        data = file.read()
+    if not data:
+        return [], offset, stat.st_mtime, stat.st_size
+    next_offset = stat.st_size
+    if not data.endswith(b"\n"):
+        last_newline = data.rfind(b"\n")
+        if last_newline < 0:
+            return [], offset, stat.st_mtime, stat.st_size
+        next_offset = offset + last_newline + 1
+        data = data[: last_newline + 1]
+    return data.decode("utf-8", errors="ignore").splitlines(), next_offset, stat.st_mtime, stat.st_size
+
+
+def new_session_items(path: Path, checkpoint: Any, max_items: int = 500) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    stat = path.stat()
+    if isinstance(checkpoint, dict):
+        if checkpoint.get("mtime") == stat.st_mtime and checkpoint.get("size") == stat.st_size:
+            return [], checkpoint
+        lines, offset, mtime, size = read_appended_lines(path, int(checkpoint.get("offset", 0)))
+        items = summarize_lines(lines, mtime, max_items)
+        turn_index = int(checkpoint.get("turn_index", 0)) + len(items)
+        return items, {"offset": offset, "mtime": mtime, "size": size, "turn_index": turn_index}
+
+    # ponytail: one-run migration from old count checkpoint; after this, byte offsets own the stream.
+    items = summarize_session(path, max_items)
+    seen = int(checkpoint or 0)
+    return items[seen:], {"offset": stat.st_size, "mtime": stat.st_mtime, "size": stat.st_size, "turn_index": max(seen, len(items))}
 
 
 def run_once(args: argparse.Namespace) -> dict[str, Any]:
@@ -141,17 +182,63 @@ def run_once(args: argparse.Namespace) -> dict[str, Any]:
     actions = []
     for path in session_files(root)[: args.max_files]:
         rel = str(path)
-        summaries = summarize_session(path)
-        seen = int(state.get(rel, 0))
-        new = summaries[seen:]
+        previous = state.get(rel)
+        new, checkpoint = new_session_items(path, state.get(rel), args.max_items)
+        start_index = int(previous.get("turn_index", 0) if isinstance(previous, dict) else previous or 0)
         if not new:
+            state[rel] = checkpoint
             continue
-        for idx, item in enumerate(new, start=seen + 1):
+        for idx, item in enumerate(new, start=start_index + 1):
             store.record_turn(summary=item["summary"], conversation_id=rel, turn_index=idx, created_at=item["created_at"])
-        state[rel] = len(summaries)
+        state[rel] = checkpoint
     actions.append({"type": "dream", "result": store.dream_incremental(args.window_minutes, args.lookback_hours, args.topic, args.max_results, args.force, args.auto_apply, not args.no_ai)})
     state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"actions": actions, "state_path": str(state_path)}
+
+
+def self_check() -> None:
+    temp = Path(tempfile.mkdtemp(prefix="cem-watcher-"))
+    try:
+        sessions = temp / "sessions"
+        sessions.mkdir()
+        session = sessions / "rollout.jsonl"
+        session.write_text(
+            json.dumps({"type": "event_msg", "payload": {"type": "user_message", "message": "first useful turn"}}) + "\n",
+            encoding="utf-8",
+        )
+        args = argparse.Namespace(
+            home=str(temp / "home"),
+            sessions=str(sessions),
+            window_minutes=30,
+            lookback_hours=24,
+            topic="test",
+            max_results=8,
+            max_files=3,
+            max_items=500,
+            force=False,
+            auto_apply=False,
+            no_ai=True,
+        )
+        first = run_once(args)
+        state = json.loads(Path(first["state_path"]).read_text(encoding="utf-8"))
+        checkpoint = state[str(session)]
+        assert checkpoint["turn_index"] == 1
+        before_offset = checkpoint["offset"]
+        session.write_text(
+            session.read_text(encoding="utf-8")
+            + json.dumps({"type": "event_msg", "payload": {"type": "user_message", "message": "second useful turn"}})
+            + "\n",
+            encoding="utf-8",
+        )
+        second = run_once(args)
+        state = json.loads(Path(second["state_path"]).read_text(encoding="utf-8"))
+        assert state[str(session)]["offset"] > before_offset
+        with ExperienceStore(temp / "home").connect() as conn:
+            rows = conn.execute("select turn_index, summary from turns order by id").fetchall()
+        assert [(row[0], row[1]) for row in rows] == [(1, "first useful turn"), (2, "second useful turn")]
+        print(json.dumps({"ok": True, "turns": len(rows)}, ensure_ascii=False, indent=2))
+    finally:
+        shutil.rmtree(temp)
 
 
 def daemonize(args: argparse.Namespace) -> None:
@@ -169,6 +256,8 @@ def daemonize(args: argparse.Namespace) -> None:
         str(args.lookback_hours),
         "--max-files",
         str(args.max_files),
+        "--max-items",
+        str(args.max_items),
         "--interval",
         str(args.interval or args.window_minutes * 60),
     ]
@@ -189,12 +278,17 @@ def main() -> None:
     parser.add_argument("--topic", default="codex session lessons")
     parser.add_argument("--max-results", type=int, default=8)
     parser.add_argument("--max-files", type=int, default=3)
+    parser.add_argument("--max-items", type=int, default=500)
     parser.add_argument("--interval", type=float, default=0)
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--auto-apply", action="store_true")
     parser.add_argument("--no-ai", action="store_true")
     parser.add_argument("--daemon", action="store_true")
+    parser.add_argument("--self-check", action="store_true")
     args = parser.parse_args()
+    if args.self_check:
+        self_check()
+        return
     if args.daemon:
         daemonize(args)
         return
